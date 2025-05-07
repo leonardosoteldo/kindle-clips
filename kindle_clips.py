@@ -86,43 +86,56 @@ def is_valid_clip(clip: Clip) -> bool:
 
 def parse_page_info(string: str) -> list[int]:
     "Parse the page information as given in Clip.info."
-    pages = re.search(r'pages? ([0-9]+)-([0-9]+)|page ([0-9]+)',
+    match = re.search(r'pages? ([0-9]+)-([0-9]+)|page ([0-9]+)',
                       string, re.IGNORECASE)
-    if pages is None:
+    if match is None:
         return []
     else:
-        return [int(p) for p in pages.groups() if p is not None]
+        return [int(page) for page in match.groups() if page is not None]
 
 def parse_location_info(string: str) -> list[int]:
     "Parse the location information as given in Clip.info."
-    loc = re.search(r'Location ([0-9]+)-([0-9]+)|Location ([0-9]+)',
+    match = re.search(r'Location ([0-9]+)-([0-9]+)|Location ([0-9]+)',
                     string, re.IGNORECASE)
-    if loc is None:
+    if match is None:
         return []
     else:
-        return [int(l) for l in loc.groups() if l is not None]
+        return [int(loc) for loc in match.groups() if loc is not None]
 
 def parse_date_info(string: str) -> dt.date | None:
     "Parse the date information as given in Clip.info."
-    date  = re.search(r'Added on [a-z]+, ([a-z]+) ([0-9]{1,2}), ([0-9]{4})',
+    match = re.search(r'Added on [a-z]+, ([a-z]+) ([0-9]{1,2}), ([0-9]{4})',
                       string, re.IGNORECASE)
-    if date is None:
+    if match is None:
         return None
     else:
-        return dt.date(int(date.group(3)),
-                       MONTHS[date.group(1).lower()],
-                       int(date.group(2)))
+        date: dict = {'year' : int(match.group(3)),
+                      'month' : MONTHS[match.group(1).lower()],
+                      'day' : int(match.group(2))}
+
+        return dt.date(date['year'], date['month'], date['day'])
 
 def parse_time_info(string: str) -> dt.time | None:
     "Parse the time information as given in Clip.info."
-    time  = re.search(r'([0-9]{1,2}):([0-9]{1,2}):([0-9]{1,2}) ([AMP]+)$',
+    match = re.search(r'([0-9]{1,2}):([0-9]{1,2}):([0-9]{1,2}) ([AMP]+)$',
                       string, re.IGNORECASE)
-    if time is None:
+    if match is None:
         return None
     else:
-        return dt.time(int(time.group(1)),
-                       int(time.group(2)),
-                       int(time.group(3)))
+        time: dict = {'hour' : int(match.group(1)),
+                      'minutes' : int(match.group(2)),
+                      'seconds' : int(match.group(3)),
+                      'period' : match.group(4).upper()}
+
+        # Convert from 12h time to 24h time
+        # TODO: Kindle uses 12am for noon or midnight?
+        # TODO: Make all this logic its own function
+        if time['period'] == 'PM' and time['hour'] != 12:
+            time['hour'] += 12
+        elif time['period'] == 'AM' and time['hour'] == 12:
+            time['hour'] -= 12
+
+        return dt.time(time['hour'], time['minutes'], time['seconds'])
 
 ### TESTS
 ######################################################################
@@ -162,3 +175,12 @@ def test_parse_clips_file():
     assert highlights[3].source    == 'Python (Python Documentation Authors)'
     assert highlights[3].date      == dt.date(2024, 5, 10)
     assert highlights[3].date      == dt.time(18, 45, 50)
+
+    # TODO: This logic should be on its own function
+def test_parse_time_info():
+    assert parse_time_info('11:59:59 PM') == dt.time(23, 59, 59)
+    assert parse_time_info('12:00:00 AM') == dt.time(0, 0, 0)
+    assert parse_time_info('12:00:01 AM') == dt.time(0, 0, 1)
+    assert parse_time_info('11:59:59 AM') == dt.time(11, 59, 59)
+    assert parse_time_info('12:00:00 PM') == dt.time(12, 0, 0)
+    assert parse_time_info('12:00:01 PM') == dt.time(12, 0, 1)
