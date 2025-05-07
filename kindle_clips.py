@@ -36,8 +36,8 @@ class Highlight:
     source: Source | str
     page: list[int]
     location: list[int]
-    date: dt.date
-    time: dt.time
+    date: dt.date | None
+    time: dt.time | None
     content: str
 
 def parse_clips_file(file: str) -> list[Highlight]:
@@ -54,32 +54,56 @@ def parse_clips_file(file: str) -> list[Highlight]:
     return []
 
 def parse_clip(clip: list[str]) -> Highlight:
-    """Parse a kindle clip (a list of three strings) and generate a Highlight object"""
+    """Parse a kindle clip (a list of three strings) and generate a Highlight object.
+
+    Raise a RuntimeError if the content of the clip is an empty string. If any other information is not found, uses an empty list or None, according to the Highlight field.
+
+    See 'parse_clips-file() documentation for more information about how Kindle stores the clips."""
+
+    if len(clip) != 3:
+        raise ValueError("Clip not properly formed!")
+    elif clip[2] == '':
+        raise RuntimeError("Clip's content seems to be an empty string!")
 
     source: str = clip[0]
     metadata: str = clip[1]
     content: str = clip[2]
 
+    # parsing of page info
     m_pages = re.search(r'pages? ([0-9]+)-([0-9]+)|page ([0-9]+)', metadata, re.IGNORECASE)
-    m_loc   = re.search(r'Location ([0-9]+)-([0-9]+)|Location ([0-9]+)', metadata, re.IGNORECASE)
+    if m_pages is None:
+        pages: list[int] = []
+    else:
+        str_pages: filter = filter(lambda e: e is not None, m_pages.groups())
+        pages: list[int] = list(map(lambda e: int(e), str_pages))
+
+    # parsing of location info
+    m_loc = re.search(r'Location ([0-9]+)-([0-9]+)|Location ([0-9]+)', metadata, re.IGNORECASE)
+    if m_loc is None:
+        loc: list[int] = []
+    else:
+        str_loc: filter = filter(lambda e: e is not None, m_loc.groups())
+        loc: list[int] = list(map(lambda e: int(e), str_loc))
+
+    # parsing of date info
     m_date  = re.search(r'Added on [a-z]+, ([a-z]+) ([0-9]{1,2}), ([0-9]{4})', metadata, re.IGNORECASE)
+    if m_date is None:
+        date = None
+    else:
+        date: dt.date = dt.date(int(m_date.group(3)),
+                                MONTHS[m_date.group(1).lower()],
+                                int(m_date.group(2)))
+
+    # parsing of time info
     m_time  = re.search(r'([0-9]{1,2}):([0-9]{1,2}):([0-9]{1,2}) ([AMP]+)$', metadata, re.IGNORECASE)
+    if m_time is None:
+        time = None
+    else:
+        time: dt.time = dt.time(int(m_time.group(1)),
+                                int(m_time.group(2)),
+                                int(m_time.group(3)))
 
-    pages: list[int] = list(filter(lambda e: e is not None, m_pages.groups()))
-    loc: list[int] = list(filter(lambda e: e is not None, m_loc.groups()))
-    date: dt.date = dt.date(int(m_date.group(3)),
-                            MONTHS[m_date.group(1).lower()],
-                            int(m_date.group(2)))
-    time: dt.time = dt.time(int(m_time.group(1)),
-                            int(m_time.group(2)),
-                            int(m_time.group(3)))
-
-    return Highlight(source,
-                     list(map(lambda e: int(e), pages)),
-                     list(map(lambda e: int(e), loc)),
-                     date,
-                     time,
-                     content)
+    return Highlight(source, pages, loc, date, time, content)
 
 def is_valid_clip(clip: list[str]) -> bool:
     """Check if a given kindle clip (a list of three strings) is a valid kindle highlight.
@@ -112,13 +136,18 @@ def test_parse_clip():
     assert highlight.date      == dt.date(2022, 11, 17)
     assert highlight.time      == dt.time(12, 55, 54)
     assert highlight.content   == 'La Venezuela que ingresa al siglo XX, asolada...'
+    with pt.raises(ValueError):
+        parse_clip([])
+    with pt.raises(RuntimeError):
+        parse_clip(["", "", ""])
+
 
 def test_parse_clips_file():
     highlights = parse_clips_file('testing_clips.txt')
-    assert len(highlights) == 4
     assert all(map(lambda h: h.source != note_clip[0], highlights))
-    assert highlights[0].page == [40]
-    assert highlights[0].location == [542, 546]
-    assert highlights[3].source == 'Python (Python Documentation Authors)'
-    assert highlights[3].date == dt.date(2024, 5, 10)
-    assert highlights[3].date == dt.time(18, 45, 50)
+    assert len(highlights)         == 4
+    assert highlights[0].page      == [40]
+    assert highlights[0].location  == [542, 546]
+    assert highlights[3].source    == 'Python (Python Documentation Authors)'
+    assert highlights[3].date      == dt.date(2024, 5, 10)
+    assert highlights[3].date      == dt.time(18, 45, 50)
