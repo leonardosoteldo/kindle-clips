@@ -25,7 +25,6 @@ class Clip:
 
 @dataclass
 class Highlight:
-    # uuid: ???
     source: str
     page: list[int]
     location: list[int]
