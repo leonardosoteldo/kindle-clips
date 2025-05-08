@@ -17,18 +17,6 @@ MONTHS: dict = {
     "december"   : 12
 }
 
-# TODO: implementation of different sources (periodic, etc.)
-@dataclass
-class Source:
-    # uuid: ???
-    author: str
-    title: str
-    place: str
-    publisher: str
-    edition: int # edition number
-    year: int
-    pp: int # number of total pages
-
 @dataclass
 class Clip:
     source: str
@@ -38,15 +26,29 @@ class Clip:
 @dataclass
 class Highlight:
     # uuid: ???
-    source: Source | str
+    source: str
     page: list[int]
     location: list[int]
     date: dt.date | None
     time: dt.time | None
     content: str
 
-def parse_clips_file(file: str) -> list[Highlight]:
-    """Parse a given file (a path in the form of a str) into a list of Highlights.
+@dataclass
+class Report:
+    notes_cnt: int
+    highlights_cnt: int
+    highlights: list[Highlight]
+
+### IO
+######################################################################
+
+
+
+### PARSING
+######################################################################
+
+def parse_clips_file(file: str) -> Report:
+    """Parse a given file (a path in the form of a str) into a Report.
 
     Every kindle clip, as existing in the kindle's 'My Clippings.txt'
     file, consists in:
@@ -58,10 +60,10 @@ def parse_clips_file(file: str) -> list[Highlight]:
 
     Every line is read, stripped of the newline character, and stored
     as their correspondent Clip's field (the blank and delimiter lines
-    are discarded). Then the Clip is evaluated to check if its a valid
-    highlight, discarding it if its a note. Finally, the Clip is
+    are discarded). Then the Clip is evaluated to check if It's a valid
+    highlight, discarding it if It's a note. Finally, the Clip is
     passed to the 'parse_clip()' function and stored as a Highlight in
-    a list to be returned as the output of this function.
+    a list to be returned as part or the output Report.
 
     An example of a raw kindle clip as seen in a 'My clippings.txt'
     file:
@@ -81,8 +83,8 @@ def parse_clips_file(file: str) -> list[Highlight]:
 
     with open(file, mode='r', encoding='UTF-8', newline='\n') as f:
         for line in f:
-            if cnt >= 5: # The fiveth line of a clip should be a delimiter
-                clip = Clip(current_clip[0], current_clip[1], current_clip[2])
+            if cnt >= 5: # The fifth line of a clip should be a delimiter
+                clip = Clip(current_clip[0], current_clip[1], current_clip[3])
                 if is_valid_clip(clip):
                     highlights.append(parse_clip(clip))
                     current_clip.clear()
@@ -95,11 +97,7 @@ def parse_clips_file(file: str) -> list[Highlight]:
                 current_clip.append(line.removesuffix('\n'))
                 cnt += 1
         else:
-
-            print(f'{notes} notes where found.')
-            print(f'{len(highlights)} highlights where processed successfully.')
-
-            return highlights
+            return Report(notes, len(highlights), highlights)
 
 def parse_clip(clip: Clip) -> Highlight:
     """Parse a Clip and generate a Highlight object.
@@ -145,11 +143,10 @@ def parse_date_info(string: str) -> dt.date | None:
     if match is None:
         return None
     else:
-        date: dict = {'year' : int(match.group(3)),
-                      'month' : MONTHS[match.group(1).lower()],
-                      'day' : int(match.group(2))}
-
-        return dt.date(date['year'], date['month'], date['day'])
+        year: int  = int(match.group(3))
+        month: int = MONTHS[match.group(1).lower()]
+        day: int   = int(match.group(2))
+        return dt.date(year, month, day)
 
 def parse_time_info(string: str) -> dt.time | None:
     "Parse the time information as given in Clip.info."
@@ -158,20 +155,19 @@ def parse_time_info(string: str) -> dt.time | None:
     if match is None:
         return None
     else:
-        time: dict = {'hour' : int(match.group(1)),
-                      'minutes' : int(match.group(2)),
-                      'seconds' : int(match.group(3)),
-                      'period' : match.group(4).upper()}
+        hour: int     = int(match.group(1))
+        minutes: int  = int(match.group(2))
+        seconds: int  = int(match.group(3))
+        period: str   = match.group(4).upper()
 
         # Convert from 12h time to 24h time
         # TODO: Kindle uses 12am for noon or midnight?
-        # TODO: Make all this logic its own function
-        if time['period'] == 'PM' and time['hour'] != 12:
-            time['hour'] += 12
-        elif time['period'] == 'AM' and time['hour'] == 12:
-            time['hour'] -= 12
+        if period == 'PM' and hour != 12:
+            hour += 12
+        elif period  == 'AM' and hour == 12:
+            hour -= 12
 
-        return dt.time(time['hour'], time['minutes'], time['seconds'])
+        return dt.time(hour, minutes, seconds)
 
 ### TESTS
 ######################################################################
@@ -203,12 +199,13 @@ def test_parse_clip():
     #     parse_clip(clip("", "", ""))
 
 def test_parse_clips_file():
-    highlights = parse_clips_file('testing_clips.txt')
+    highlights = parse_clips_file('testing_clips.txt').highlights
     assert all(map(lambda h: h.source != note_clip.source, highlights))
     assert len(highlights)         == 4
     assert highlights[0].page      == [40]
     assert highlights[0].location  == [542, 546]
     assert highlights[3].source    == 'Python (Python Documentation Authors)'
+    assert highlights[3].content.startswith('To use formatted string literals')
     assert highlights[3].date      == dt.date(2024, 5, 10)
     assert highlights[3].time      == dt.time(18, 45, 50)
 
