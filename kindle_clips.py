@@ -25,7 +25,6 @@ class Clip:
 
 @dataclass
 class Highlight:
-    # uuid: ???
     source: str
     page: list[int]
     location: list[int]
@@ -195,8 +194,6 @@ def test_parse_clip():
     assert highlight.date      == dt.date(2022, 11, 17)
     assert highlight.time      == dt.time(12, 55, 54)
     assert highlight.content   == 'La Venezuela que ingresa al siglo XX, asolada...'
-    # with pt.raises(RuntimeError):
-    #     parse_clip(clip("", "", ""))
 
 def test_parse_clips_file():
     highlights = parse_clips_file('testing_clips.txt').highlights
