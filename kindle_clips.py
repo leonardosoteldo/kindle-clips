@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 import datetime as dt
 import re
-import pytest as pt
 
 MONTHS: dict = {
     "january"    : 1,
@@ -53,17 +52,54 @@ def parse_clips_file(file: str) -> list[Highlight]:
     file, consists in:
       - a line with the source's title and author;
       - a line with page, location, date and time (of the clip) information;
-      - a line with the hightlighted text or annotated commentary;
-      - and a delimiter line made by repeated equal signs: '=========='
+      - a blank line;
+      - a line with the hightlighted text or annotated commentary and
+      - a delimiter line made by repeated equal signs: '=========='
 
-    Every line is read and stored as a separate string in a list (the
-    delimiter line is discarded), the second line is evaluated to
-    check if the clip is a note and discard it if True. Then the list
-    of strings (clip) is passed to the 'parse_clip()' function, and
-    its output (a Highlight) is stored in a list of Highlights to be
-    returned as output."""
+    Every line is read, stripped of the newline character, and stored
+    as their correspondent Clip's field (the blank and delimiter lines
+    are discarded). Then the Clip is evaluated to check if its a valid
+    highlight, discarding it if its a note. Finally, the Clip is
+    passed to the 'parse_clip()' function and stored as a Highlight in
+    a list to be returned as the output of this function.
 
-    return []
+    An example of a raw kindle clip as seen in a 'My clippings.txt'
+    file:
+
+    > Common LISP: A Gentle Introduction to Symbolic Computation (David S. Touretzky)
+    > - Your Highlight on page 46 | Location 694-694 | Added on Sunday, August 27, 2023 1:37:08 PM
+    >
+    > The length of a list is the number of elements it has
+    > ==========
+
+    """
+
+    highlights: list[Highlight] = []
+    notes: int = 0
+    current_clip: list[str] = []
+    cnt: int = 1
+
+    with open(file, mode='r', encoding='UTF-8', newline='\n') as f:
+        for line in f:
+            if cnt >= 5: # The fiveth line of a clip should be a delimiter
+                clip = Clip(current_clip[0], current_clip[1], current_clip[2])
+                if is_valid_clip(clip):
+                    highlights.append(parse_clip(clip))
+                    current_clip.clear()
+                    cnt = 1
+                else:
+                    notes += 1
+                    current_clip.clear()
+                    cnt = 1
+            else:
+                current_clip.append(line.removesuffix('\n'))
+                cnt += 1
+        else:
+
+            print(f'{notes} notes where found.')
+            print(f'{len(highlights)} highlights where processed successfully.')
+
+            return highlights
 
 def parse_clip(clip: Clip) -> Highlight:
     """Parse a Clip and generate a Highlight object.
@@ -174,7 +210,7 @@ def test_parse_clips_file():
     assert highlights[0].location  == [542, 546]
     assert highlights[3].source    == 'Python (Python Documentation Authors)'
     assert highlights[3].date      == dt.date(2024, 5, 10)
-    assert highlights[3].date      == dt.time(18, 45, 50)
+    assert highlights[3].time      == dt.time(18, 45, 50)
 
     # TODO: This logic should be on its own function
 def test_parse_time_info():
