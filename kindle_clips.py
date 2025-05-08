@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 import datetime as dt
 import re
+import argparse
 
 MONTHS: dict = {
     "january"    : 1,
@@ -38,12 +39,7 @@ class Report:
     highlights_cnt: int
     highlights: list[Highlight]
 
-### IO
-######################################################################
-
-
-
-### PARSING
+### CLIPS PARSING
 ######################################################################
 
 def parse_clips_file(file: str) -> Report:
@@ -81,20 +77,26 @@ def parse_clips_file(file: str) -> Report:
     cnt: int = 1
 
     with open(file, mode='r', encoding='UTF-8', newline='\n') as f:
+
         for line in f:
+
             if cnt >= 5: # The fifth line of a clip should be a delimiter
                 clip = Clip(current_clip[0], current_clip[1], current_clip[3])
+
                 if is_valid_clip(clip):
                     highlights.append(parse_clip(clip))
                     current_clip.clear()
                     cnt = 1
+
                 else:
                     notes += 1
                     current_clip.clear()
                     cnt = 1
+
             else:
                 current_clip.append(line.removesuffix('\n'))
                 cnt += 1
+
         else:
             return Report(notes, len(highlights), highlights)
 
@@ -167,6 +169,68 @@ def parse_time_info(string: str) -> dt.time | None:
             hour -= 12
 
         return dt.time(hour, minutes, seconds)
+
+### IO
+######################################################################
+
+def text_formatter(highlights: list[Highlight]) -> str:
+    """Process a list of Highlights into a pretty text format."""
+    return 'text formatter not implemented'
+
+def org_formatter(highlights: list[Highlight]) -> str:
+    """Process a list of Highlights into a pretty org-mode format."""
+    return 'org formatter not implemented'
+
+def json_formatter(highlights: list[Highlight]) -> str:
+    """Process a list of Highlights into json format."""
+    return 'json formatter not implemented'
+
+parser = argparse.ArgumentParser(
+    prog='kindle-highlights',
+    description='''Convert Kindle highlights into formatted text,
+    org-mode or JSON entries.''',
+    epilog='More info at https://github.com/leonardosoteldo/kindle-highlights')
+
+parser.add_argument('file', type=str,
+                    help='File that contains the Kindle highlights.')
+
+parser.add_argument('-q', '--quiet', action='store_true',
+                    help="Dont't give any message when called.")
+
+parser.add_argument('-f', '--format', type=str, choices=['text', 'org', 'json'],
+                    default='text', help="""Define the format of the
+                    output file. Could be 'text', 'org' or 'json'.
+                    Defaults to 'text'""")
+
+parser.add_argument('-o', '--output-file', type=str, default=None,
+                    help='''Define the output file of the program.
+                    stdout is used if none given.''')
+
+args = parser.parse_args()
+
+if __name__ == '__main__':
+
+    report: Report = parse_clips_file(args.file)
+
+    if not args.quiet:
+        print(f"Extracting highlights from '{args.file}'")
+        print(f"Found and discarded {report.notes_cnt} notes.")
+        print(f"Found and extracted {report.highlights_cnt} highlights.")
+
+    if args.format == 'text':
+        output: str = text_formatter(report.highlights)
+    elif args.format == 'org':
+        output: str = org_formatter(report.highlights)
+    elif args.format == 'json':
+        output: str = json_formatter(report.highlights)
+    else:
+        raise RuntimeError
+
+    if args.output_file is None:
+        print(output)
+    else:
+        with open(args.output_file, mode='w', encoding='utf-8') as file:
+            file.write(output)
 
 ### TESTS
 ######################################################################
