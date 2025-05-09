@@ -129,11 +129,7 @@ def get_rawclip_type(rclip: RawClip) -> str:
     elif rclip.info.startswith('- Your Note'):
         return 'note'
     else:
-<<<<<<< HEAD
         raise RuntimeError('Your Kindle clips file looks weird. Couldn\'t parse it')
-=======
-        raise RuntimeError
->>>>>>> origin/main
 
 def parse_page_info(string: str) -> list[int]:
     "Parse the page information as given in Clip.info."
