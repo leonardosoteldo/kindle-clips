@@ -185,16 +185,16 @@ def parse_time_info(string: str) -> time | None:
 ### IO
 ######################################################################
 
-def text_formatter(highlights: list[Clip]) -> str:
-    """Process a list of Highlights into a pretty text format."""
+def text_formatter(clips: list[Clip]) -> str:
+    """Process a list of clips into a pretty text format."""
     return 'text formatter not implemented'
 
-def org_formatter(highlights: list[Clip]) -> str:
-    """Process a list of Highlights into a pretty org-mode format."""
+def org_formatter(clips: list[Clip]) -> str:
+    """Process a list of clips into a pretty org-mode format."""
     return 'org formatter not implemented'
 
-def json_formatter(highlights: list[Clip]) -> str:
-    """Process a list of Highlights into json format."""
+def json_formatter(clips: list[Clip]) -> str:
+    """Process a list of clips into json format."""
     return 'json formatter not implemented'
 
 parser = argparse.ArgumentParser(
@@ -206,43 +206,70 @@ parser = argparse.ArgumentParser(
 parser.add_argument('file', type=str,
                     help='File that contains the Kindle highlights.')
 
-parser.add_argument('-q', '--quiet', action='store_true',
-                    help="Dont't give any message when called.")
-
-parser.add_argument('-f', '--format', type=str, choices=['text', 'org', 'json'],
-                    default='text', help="""Define the format of the
-                    output file. Could be 'text', 'org' or 'json'.
-                    Defaults to 'text'""")
-
 parser.add_argument('-o', '--output-file', type=str, default=None,
                     help='''Define the output file of the program.
                     stdout is used if none given.''')
+
+parser.add_argument('-f', '--format', type=str, choices=['text', 'org', 'json'],
+                    default='text', help="""Define the format of the
+                    output. Could be 'text', 'org' or 'json'. Defaults
+                    to 'text'""")
+
+type_of_clips = parser.add_mutually_exclusive_group()
+
+type_of_clips.add_argument('-H', '--highlights', action='store_true',
+                           help='''If used, the only clips extracted
+                           are highlights. The default is all clips.''')
+
+type_of_clips.add_argument('-n', '--notes', action='store_true',
+                           help='''If used, the only clips extracted
+                           are notes. The default is all clips.''')
+
+parser.add_argument('-q', '--quiet', action='store_true',
+                    help="Dont't print any message.")
 
 args = parser.parse_args()
 
 if __name__ == '__main__':
 
+    match args.format:
+        case 'text':
+            formatter_func = text_formatter
+        case 'org':
+            formatter_func = org_formatter
+        case 'json':
+            formatter_func = json_formatter
+        case _:
+            raise RuntimeError
+
     extraction: Extraction = parse_rawclips_file(args.file)
 
-    if not args.quiet:
-        print(f"Extracting highlights from '{args.file}'.")
-        print(f"Found and discarded {len(extraction.notes)} notes.")
-        print(f"Found and extracted {len(extraction.highlights)} highlights.")
+    if args.notes:
+        if not args.quiet:
+            print(f"Processing '{args.file}'.")
+            print(f"Found {len(extraction.notes)} notes.")
 
-    if args.format == 'text':
-        output: str = text_formatter(extraction.highlights)
-    elif args.format == 'org':
-        output: str = org_formatter(extraction.highlights)
-    elif args.format == 'json':
-        output: str = json_formatter(extraction.highlights)
-    else:
-        raise RuntimeError # Not necessary, but solves linter complains.
+        results = formatter_func(extraction.notes)
+
+    elif args.highlights:
+        if not args.quiet:
+            print(f"Processing '{args.file}'.")
+            print(f"Found {len(extraction.highlights)} highlights.")
+
+        results = formatter_func(extraction.highlights)
+
+    else: # notes and highlights
+        if not args.quiet:
+            print(f"Processing '{args.file}'.")
+            print(f"Found {len(extraction.notes)} notes.")
+            print(f"Found {len(extraction.highlights)} highlights.")
+        results = formatter_func(extraction.notes + extraction.highlights)
 
     if args.output_file is None:
-        print(output)
+        print(results)
     else:
         with open(args.output_file, mode='w', encoding='utf-8') as file:
-            file.write(output)
+            file.write(results)
 
 ### TESTS
 ######################################################################
