@@ -185,9 +185,43 @@ def parse_time_info(string: str) -> time | None:
 ### IO
 ######################################################################
 
+def pages_and_loc_to_str(pp: list[int] | None) -> str:
+    "Convert pages and locations into a pretty string."
+
+    if pp is None:
+        return 'no data'
+
+    else:
+        pp_len: int = len(pp)
+
+        if pp_len == 0:
+            return 'no data'
+        elif pp_len == 1:
+            return str(pp[0])
+        elif pp_len == 2:
+            return str(pp[0]) + '-' + str(pp[1])
+        else:
+            return ''.join(str(i) + ', ' for i in pp).removesuffix(', ')
+
 def text_formatter(clips: list[Clip]) -> str:
     """Process a list of clips into a pretty text format."""
-    return 'text formatter not implemented'
+
+    columns: int = 70
+    delimiter: str = '-' * columns + '\n'
+    result: list[str] = []
+
+    for clip in clips:
+
+        c = ''.join([f"Source: {clip.source}\n",
+                     f"Page: {pages_and_loc_to_str(clip.page)}\n",
+                     f"Location: {pages_and_loc_to_str(clip.location)}\n",
+                     f"Creation: {str(clip.date)} | {str(clip.time)}\n",
+                     f"{clip.type.capitalize()}:\n\n{clip.content}\n",
+                     delimiter])
+
+        result.append(c)
+
+    return delimiter + ''.join(result)
 
 def org_formatter(clips: list[Clip]) -> str:
     """Process a list of clips into a pretty org-mode format."""
@@ -215,13 +249,13 @@ parser.add_argument('-f', '--format', type=str, choices=['text', 'org', 'json'],
                     output. Could be 'text', 'org' or 'json'. Defaults
                     to 'text'""")
 
-type_of_clips = parser.add_mutually_exclusive_group()
+type_of_clip = parser.add_mutually_exclusive_group()
 
-type_of_clips.add_argument('-H', '--highlights', action='store_true',
+type_of_clip.add_argument('-H', '--highlights', action='store_true',
                            help='''If used, the only clips extracted
                            are highlights. The default is all clips.''')
 
-type_of_clips.add_argument('-n', '--notes', action='store_true',
+type_of_clip.add_argument('-n', '--notes', action='store_true',
                            help='''If used, the only clips extracted
                            are notes. The default is all clips.''')
 
@@ -340,3 +374,9 @@ def test_parse_time_info():
     assert parse_time_info('11:59:59 AM') == time(11, 59, 59)
     assert parse_time_info('12:00:00 PM') == time(12, 0, 0)
     assert parse_time_info('12:00:01 PM') == time(12, 0, 1)
+
+def test_pages_and_loc_to_str():
+    assert pages_and_loc_to_str([]) == 'no data'
+    assert pages_and_loc_to_str([1]) == '1'
+    assert pages_and_loc_to_str([1, 5]) == '1-5'
+    assert pages_and_loc_to_str([1, 5, 10]) == '1, 5, 10'
