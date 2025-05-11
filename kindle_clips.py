@@ -3,6 +3,9 @@ from datetime import date, time
 from re import search, IGNORECASE
 import argparse
 
+### CONSTANTS AND CLASSES
+######################################################################
+
 MONTHS: dict = {
     "january"    : 1,
     "february"   : 2,
@@ -40,12 +43,14 @@ class Clip:
 class Extraction:
     highlights: list[Clip]
     notes: list[Clip]
+    bookmarks: list[Clip]
+    unparsed: list[tuple[RawClip, int]]
 
 ### CLIPS PARSING
 ######################################################################
 
-# TODO: add functionality for notes also.
 # TODO: add basic sorting for output
+# TODO: move file handling from the parsing function to the main logic
 
 def parse_rawclips_file(file: str) -> Extraction:
     """Parse a given file (a path in the form of a str) into a Extraction.
@@ -75,11 +80,13 @@ def parse_rawclips_file(file: str) -> Extraction:
 
     """
 
-    highlights: list[Clip]  = []
-    notes: list[Clip]       = []
-    current_clip: list[str] = []
-    line_cnt: int = 0
-    cnt: int                = 1
+    highlights: list[Clip]              = []
+    notes: list[Clip]                   = []
+    bookmarks: list[Clip]               = []
+    unparsed: list[tuple[RawClip, int]] = []
+    current_clip: list[str]             = []
+    line_cnt: int                       = 0
+    cnt: int                            = 1
 
     with open(file, mode='r', encoding='UTF-8', newline='\n') as f:
 
@@ -93,40 +100,26 @@ def parse_rawclips_file(file: str) -> Extraction:
                                 current_clip[2],
                                 current_clip[3],
                                 line.removesuffix('\n'))
-                try:
-                    clip = parse_rawclip(rclip)
 
-                # If parsing returns an error, report it to stdout and
-                # continue the file loop.
-                except RuntimeError:
-                    print_rawclip_parsing_error(rclip, line_cnt)
+                clip = parse_rawclip(rclip)
 
-                    # Clear the lines collector and update counters,
-                    # then continue with the next loop iteration
-                    current_clip.clear()
-                    cnt = 1
-                    line_cnt += 1
+                # Collect the clip/rclip into the corresponding list
+                match clip.type:
+                    case 'highlight':
+                        highlights.append(clip)
+                    case 'note':
+                        notes.append(clip)
+                    case 'bookmark':
+                        bookmarks.append(clip)
+                    case 'unparsed':
+                        unparsed.append((rclip, line_cnt))
+                    case _:
+                        raise ValueError
 
-                    continue
-
-                else:
-
-                    # Collect the clip into the corresponding list
-                    match clip.type:
-                        case 'highlight':
-                            highlights.append(clip)
-                        case 'note':
-                            notes.append(clip)
-                        case 'bookmark':
-                            # bookmarks.append(clip)
-                            pass
-                        case _:
-                            raise RuntimeError
-
-                    # Clear the lines collector and update counters
-                    current_clip.clear()
-                    cnt = 1
-                    line_cnt += 1
+                # Clear the lines collector and update counters
+                current_clip.clear()
+                cnt = 1
+                line_cnt += 1
 
             else:
                 # Collect the lines
@@ -135,7 +128,7 @@ def parse_rawclips_file(file: str) -> Extraction:
                 cnt += 1
 
         else:
-            return Extraction(highlights, notes)
+            return Extraction(highlights, notes, bookmarks, unparsed)
 
 def parse_rawclip(rawclip: RawClip) -> Clip:
     """Parse a RawClip and generate a Clip object.
@@ -156,8 +149,10 @@ def get_rawclip_type(rclip: RawClip) -> str:
         return 'highlight'
     elif rclip.info.startswith('- Your Note'):
         return 'note'
+    elif rclip.info.startswith('- Your Bookmark'):
+        return 'bookmark'
     else:
-        raise RuntimeError("Your Kindle clips file looks weird. Couldn't parse it")
+        return 'unparsed'
 
 def parse_page_info(string: str) -> list[int]:
     "Parse the page information as given in Clip.info."
@@ -272,8 +267,17 @@ def pages_and_loc_to_str(pp: list[int] | None) -> str:
         else:
             return ''.join(str(i) + ', ' for i in pp).removesuffix(', ')
 
+def print_parsing_errors(rclips: list[tuple[RawClip, int]]) -> None:
+    """Print messages about all RawClips that couldn't be parsed.
+
+    These errors are collected by the function 'parse_raw_clips_file()."""
+    for rclip, line_num in rclips:
+        print_rawclip_parsing_error(rclip, line_num)
+    else:
+        return
+
 def print_rawclip_parsing_error(rclip: RawClip, line_num: int) -> None:
-    "Print message about error while parsing a RawClip."
+    "Print message about RawClip that couldn't be parsed correctly."
     print("Got an error while processing your Kindle clips file.")
     print(f"The clip ending at line {line_num} couldn't be parsed:")
     print(f'    > {rclip.source}')
@@ -293,7 +297,7 @@ def print_extraction_messages(is_quiet: bool, extraction: Extraction,
     elif not types:
         print(f"Found {len(extraction.highlights)} highlights.")
         print(f"Found {len(extraction.notes)} notes.")
-        #print(f"Found {len(extraction.bookmarks)} bookmarks.")
+        print(f"Found {len(extraction.bookmarks)} bookmarks.")
         return
 
     else:
@@ -303,8 +307,8 @@ def print_extraction_messages(is_quiet: bool, extraction: Extraction,
         if 'notes' in types:
             print(f"Found {len(extraction.notes)} notes.")
 
-        # if 'bookmarks' in types:
-        #     print(f"Found {len(extraction.bookmarks)} bookmarks.")
+        if 'bookmarks' in types:
+            print(f"Found {len(extraction.bookmarks)} bookmarks.")
 
         return
 
@@ -363,13 +367,15 @@ if __name__ == '__main__':
     extraction: Extraction = parse_rawclips_file(args.file)
     results: list[Clip] = []
 
+    print_parsing_errors(extraction.unparsed)
+
     # Print messages about extracted and requested clips
     print_extraction_messages(args.quiet, extraction, args.types)
 
     # Define which type of the extracted clips are needed by request
     # of the user; the others are not used
     if not args.types:
-        results = extraction.highlights + extraction.notes
+        results = extraction.highlights + extraction.notes + extraction.bookmarks
 
     else:
         if 'highlights' in args.types:
@@ -378,8 +384,8 @@ if __name__ == '__main__':
         if 'notes' in args.types:
             results.extend(extraction.notes)
 
-        # if 'bookmarks' in args.types:
-        #     results.extend(extraction.bookmarks)
+        if 'bookmarks' in args.types:
+            results.extend(extraction.bookmarks)
 
     # Print to stdout or write to requested file
     if args.output_file is None:
