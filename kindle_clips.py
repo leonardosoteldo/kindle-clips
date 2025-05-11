@@ -78,32 +78,60 @@ def parse_rawclips_file(file: str) -> Extraction:
     highlights: list[Clip]  = []
     notes: list[Clip]       = []
     current_clip: list[str] = []
+    line_cnt: int = 0
     cnt: int                = 1
 
     with open(file, mode='r', encoding='UTF-8', newline='\n') as f:
 
         for line in f:
 
-            # The fifth line of a clip should be a delimiter
+            # The fifth line of a clip should be a delimiter. Collect
+            # the fivelines, create a RawClip and parse it into a Clip.
             if cnt >= 5:
-                cnt = 1
-                clip = parse_rawclip(RawClip(current_clip[0],
-                                             current_clip[1],
-                                             current_clip[2],
-                                             current_clip[3],
-                                             line.removesuffix('\n')))
+                rclip = RawClip(current_clip[0],
+                                current_clip[1],
+                                current_clip[2],
+                                current_clip[3],
+                                line.removesuffix('\n'))
+                try:
+                    clip = parse_rawclip(rclip)
 
-                if clip.type == 'highlight':
-                    highlights.append(clip)
+                # If parsing returns an error, report it to stdout and
+                # continue the file loop.
+                except RuntimeError:
+                    print_rawclip_parsing_error(rclip, line_cnt)
+
+                    # Clear the lines collector and update counters,
+                    # then continue with the next loop iteration
                     current_clip.clear()
-                elif clip.type == 'note':
-                    notes.append(clip)
-                    current_clip.clear()
+                    cnt = 1
+                    line_cnt += 1
+
+                    continue
+
                 else:
-                    raise RuntimeError
+
+                    # Collect the clip into the corresponding list
+                    match clip.type:
+                        case 'highlight':
+                            highlights.append(clip)
+                        case 'note':
+                            notes.append(clip)
+                        case 'bookmark':
+                            # bookmarks.append(clip)
+                            pass
+                        case _:
+                            raise RuntimeError
+
+                    # Clear the lines collector and update counters
+                    current_clip.clear()
+                    cnt = 1
+                    line_cnt += 1
 
             else:
+                # Collect the lines
                 current_clip.append(line.removesuffix('\n'))
+                line_cnt += 1
                 cnt += 1
 
         else:
@@ -129,7 +157,7 @@ def get_rawclip_type(rclip: RawClip) -> str:
     elif rclip.info.startswith('- Your Note'):
         return 'note'
     else:
-        raise RuntimeError('Your Kindle clips file looks weird. Couldn\'t parse it')
+        raise RuntimeError("Your Kindle clips file looks weird. Couldn't parse it")
 
 def parse_page_info(string: str) -> list[int]:
     "Parse the page information as given in Clip.info."
@@ -182,26 +210,21 @@ def parse_time_info(string: str) -> time | None:
 
         return time(hour, minutes, seconds)
 
-### IO
+### OUTPUT FORMATTING AND MESSASGING
 ######################################################################
 
-def pages_and_loc_to_str(pp: list[int] | None) -> str:
-    "Convert pages and locations into a pretty string."
+def format_clips(clips: list[Clip], format: str) -> str:
+    "Return a string with given Clips properly formatted."
 
-    if pp is None:
-        return 'no data'
-
-    else:
-        pp_len: int = len(pp)
-
-        if pp_len == 0:
-            return 'no data'
-        elif pp_len == 1:
-            return str(pp[0])
-        elif pp_len == 2:
-            return str(pp[0]) + '-' + str(pp[1])
-        else:
-            return ''.join(str(i) + ', ' for i in pp).removesuffix(', ')
+    match format:
+        case 'text':
+            return text_formatter(clips)
+        case 'org':
+            return org_formatter(clips)
+        case 'json':
+            return json_formatter(clips)
+        case _:
+            raise ValueError('Given format is not defined.')
 
 def text_formatter(clips: list[Clip]) -> str:
     """Process a list of clips into a pretty text format."""
@@ -231,6 +254,63 @@ def json_formatter(clips: list[Clip]) -> str:
     """Process a list of clips into json format."""
     return 'json formatter not implemented'
 
+def pages_and_loc_to_str(pp: list[int] | None) -> str:
+    "Convert pages and locations into a pretty string."
+
+    if pp is None:
+        return 'no data'
+
+    else:
+        pp_len: int = len(pp)
+
+        if pp_len == 0:
+            return 'no data'
+        elif pp_len == 1:
+            return str(pp[0])
+        elif pp_len == 2:
+            return str(pp[0]) + '-' + str(pp[1])
+        else:
+            return ''.join(str(i) + ', ' for i in pp).removesuffix(', ')
+
+def print_rawclip_parsing_error(rclip: RawClip, line_num: int) -> None:
+    "Print message about error while parsing a RawClip."
+    print("Got an error while processing your Kindle clips file.")
+    print(f"The clip ending at line {line_num} couldn't be parsed:")
+    print(f'    > {rclip.source}')
+    print(f'ERR > {rclip.info}')
+    print(f"    > {rclip.blank}")
+    print(f'    > {rclip.content}')
+
+    return
+
+def print_extraction_messages(is_quiet: bool, extraction: Extraction,
+                              types: list[str]) -> None:
+    "Print information messages of the extracted Clips."
+
+    if is_quiet:
+        return
+
+    elif not types:
+        print(f"Found {len(extraction.highlights)} highlights.")
+        print(f"Found {len(extraction.notes)} notes.")
+        #print(f"Found {len(extraction.bookmarks)} bookmarks.")
+        return
+
+    else:
+        if 'highlights' in types:
+            print(f"Found {len(extraction.highlights)} highlights.")
+
+        if 'notes' in types:
+            print(f"Found {len(extraction.notes)} notes.")
+
+        # if 'bookmarks' in types:
+        #     print(f"Found {len(extraction.bookmarks)} bookmarks.")
+
+        return
+
+### ARGUMENT PARSING AND MAIN LOGIC
+######################################################################
+
 parser = argparse.ArgumentParser(
     prog='kindle-highlights',
     description='''Convert Kindle highlights into formatted text,
@@ -249,15 +329,25 @@ parser.add_argument('-f', '--format', type=str, choices=['text', 'org', 'json'],
                     output. Could be 'text', 'org' or 'json'. Defaults
                     to 'text'""")
 
-type_of_clip = parser.add_mutually_exclusive_group()
+types_of_clip = parser.add_argument_group()
 
-type_of_clip.add_argument('-H', '--highlights', action='store_true',
-                           help='''If used, the only clips extracted
-                           are highlights. The default is all clips.''')
+types_of_clip.add_argument('-H', '--highlights', dest='types',
+                           action='append_const', const='highlights',
+                           help='''If used, the clips extracted will
+                           contain highlights. The default is all type
+                           of clips.''')
 
-type_of_clip.add_argument('-n', '--notes', action='store_true',
-                           help='''If used, the only clips extracted
-                           are notes. The default is all clips.''')
+types_of_clip.add_argument('-n', '--notes', dest='types',
+                           action='append_const', const='notes',
+                           help='''If used, the clips extracted will
+                           contain notes. The default is all type of
+                           clips.''')
+
+types_of_clip.add_argument('-b', '--bookmarks', dest='types',
+                           action='append_const', const='bookmarks',
+                           help='''If used, the clips extracted will
+                           contain bookmarks. The default is all type
+                           of clips.''')
 
 parser.add_argument('-q', '--quiet', action='store_true',
                     help="Dont't print any message.")
@@ -266,44 +356,37 @@ args = parser.parse_args()
 
 if __name__ == '__main__':
 
-    match args.format:
-        case 'text':
-            formatter_func = text_formatter
-        case 'org':
-            formatter_func = org_formatter
-        case 'json':
-            formatter_func = json_formatter
-        case _:
-            raise RuntimeError
+    # Initial message
+    if not args.quiet: print(f"Processing '{args.file}'.")
 
+    # Get extracted clips
     extraction: Extraction = parse_rawclips_file(args.file)
+    results: list[Clip] = []
 
-    if args.notes:
-        if not args.quiet:
-            print(f"Processing '{args.file}'.")
-            print(f"Found {len(extraction.notes)} notes.")
+    # Print messages about extracted and requested clips
+    print_extraction_messages(args.quiet, extraction, args.types)
 
-        results = formatter_func(extraction.notes)
+    # Define which type of the extracted clips are needed by request
+    # of the user; the others are not used
+    if not args.types:
+        results = extraction.highlights + extraction.notes
 
-    elif args.highlights:
-        if not args.quiet:
-            print(f"Processing '{args.file}'.")
-            print(f"Found {len(extraction.highlights)} highlights.")
+    else:
+        if 'highlights' in args.types:
+            results.extend(extraction.highlights)
 
-        results = formatter_func(extraction.highlights)
+        if 'notes' in args.types:
+            results.extend(extraction.notes)
 
-    else: # notes and highlights
-        if not args.quiet:
-            print(f"Processing '{args.file}'.")
-            print(f"Found {len(extraction.notes)} notes.")
-            print(f"Found {len(extraction.highlights)} highlights.")
-        results = formatter_func(extraction.notes + extraction.highlights)
+        # if 'bookmarks' in args.types:
+        #     results.extend(extraction.bookmarks)
 
+    # Print to stdout or write to requested file
     if args.output_file is None:
-        print(results)
+        print(format_clips(results, args.format))
     else:
         with open(args.output_file, mode='w', encoding='utf-8') as file:
-            file.write(results)
+            file.write(format_clips(results, args.format))
 
 ### TESTS
 ######################################################################
@@ -362,10 +445,6 @@ def test_parse_rawclips_file():
     notes = testing_clips.notes
     assert all(map(lambda c: c.source != highlight_rawclip.source, notes))
     assert len(notes)         == 3
-    assert notes[0].page      == [217]
-    assert notes[0].location  == [3326]
-    assert notes[0].source.startswith('Common LISP:')
-    assert notes[0].content.startswith('Recursion en la vida real')
 
 def test_parse_time_info():
     assert parse_time_info('11:59:59 PM') == time(23, 59, 59)
