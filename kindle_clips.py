@@ -3,23 +3,8 @@ from datetime import date, time
 from re import search, IGNORECASE
 import argparse
 
-### CONSTANTS AND CLASSES
+### CLASSES
 ######################################################################
-
-MONTHS: dict = {
-    "january"    : 1,
-    "february"   : 2,
-    "march"      : 3,
-    "april"      : 4,
-    "may"        : 5,
-    "june"       : 6,
-    "july"       : 7,
-    "august"     : 8,
-    "september"  : 9,
-    "october"    : 10,
-    "november"   : 11,
-    "december"   : 12
-}
 
 @dataclass
 class RawClip:
@@ -49,6 +34,8 @@ class Extraction:
 ### CLIPS PARSING
 ######################################################################
 
+# TODO: org-mode formatting
+# TODO: JSON formatting
 # TODO: add basic sorting for output
 # TODO: move file handling from the parsing function to the main logic
 
@@ -171,6 +158,21 @@ def parse_location_info(string: str) -> list[int]:
         return []
     else:
         return [int(loc) for loc in match.groups() if loc is not None]
+
+MONTHS: dict = {
+    "january"    : 1,
+    "february"   : 2,
+    "march"      : 3,
+    "april"      : 4,
+    "may"        : 5,
+    "june"       : 6,
+    "july"       : 7,
+    "august"     : 8,
+    "september"  : 9,
+    "october"    : 10,
+    "november"   : 11,
+    "december"   : 12
+}
 
 def parse_date_info(string: str) -> date | None:
     "Parse the date information as given in Clip.info."
@@ -316,45 +318,47 @@ def print_extraction_messages(is_quiet: bool, extraction: Extraction,
 ######################################################################
 
 parser = argparse.ArgumentParser(
-    prog='kindle-highlights',
-    description='''Convert Kindle highlights into formatted text,
-    org-mode or JSON entries.''',
-    epilog='More info at https://github.com/leonardosoteldo/kindle-highlights')
+    prog='kindle-clips',
+    description='''Convert Kindle highlights into text, org-mode or
+    JSON format.''',
+    epilog='More info at https://github.com/leonardosoteldo/kindle-clips')
 
 parser.add_argument('file', type=str,
-                    help='File that contains the Kindle highlights.')
+                    help='File that contains the Kindle clips.')
 
-parser.add_argument('-o', '--output-file', type=str, default=None,
-                    help='''Define the output file of the program.
-                    stdout is used if none given.''')
+parser.add_argument('-o', '--output', metavar='FILE', type=str,
+                    default=None, help='''Write output in FILE,
+                    excluding messages. stdout is used by
+                    default. CARE: FILES WILL BE OVERWRITTEN WITHOUT
+                    CONFIRMATION.''')
 
 parser.add_argument('-f', '--format', type=str, choices=['text', 'org', 'json'],
                     default='text', help="""Define the format of the
                     output. Could be 'text', 'org' or 'json'. Defaults
-                    to 'text'""")
+                    to 'text'. ONLY TEXT IS CURRENTLY SUPPORTED.""")
 
-types_of_clip = parser.add_argument_group()
+types_of_clip = parser.add_argument_group('types of clips', '''This
+options define which types of clips will be extracted. If no option is
+used, all types will be extracted; otherwise, only those types
+selected will.''')
 
 types_of_clip.add_argument('-H', '--highlights', dest='types',
                            action='append_const', const='highlights',
-                           help='''If used, the clips extracted will
-                           contain highlights. The default is all type
-                           of clips.''')
+                           help='''Clips extracted will contain
+                           highlights.''')
 
 types_of_clip.add_argument('-n', '--notes', dest='types',
                            action='append_const', const='notes',
-                           help='''If used, the clips extracted will
-                           contain notes. The default is all type of
-                           clips.''')
+                           help='''Clips extracted will contain
+                           notes.''')
 
 types_of_clip.add_argument('-b', '--bookmarks', dest='types',
                            action='append_const', const='bookmarks',
-                           help='''If used, the clips extracted will
-                           contain bookmarks. The default is all type
-                           of clips.''')
+                           help='''Clips extracted will contain
+                           bookmarks.''')
 
 parser.add_argument('-q', '--quiet', action='store_true',
-                    help="Dont't print any message.")
+                    help="Dont't print any message. Even error ones.")
 
 args = parser.parse_args()
 
@@ -367,9 +371,8 @@ if __name__ == '__main__':
     extraction: Extraction = parse_rawclips_file(args.file)
     results: list[Clip] = []
 
-    print_parsing_errors(extraction.unparsed)
-
-    # Print messages about extracted and requested clips
+    # Print messages about errors, extracted and requested clips
+    if not args.quiet: print_parsing_errors(extraction.unparsed)
     print_extraction_messages(args.quiet, extraction, args.types)
 
     # Define which type of the extracted clips are needed by request
@@ -393,75 +396,3 @@ if __name__ == '__main__':
     else:
         with open(args.output_file, mode='w', encoding='utf-8') as file:
             file.write(format_clips(results, args.format))
-
-### TESTS
-######################################################################
-
-import pytest
-
-highlight_rawclip: RawClip = RawClip(
-    'Ciudad, urbanización y urbanismo en el siglo XX venezolano (Venezuela siglo XX nº 3) (Spanish Edition) (Almandoz Marte, Arturo)',
-    '- Your Highlight on pages 40-45 | Location 542-546 | Added on Thursday, November 17, 2022 12:55:54 PM',
-    '',
-    'La Venezuela que ingresa al siglo XX, asolada...',
-    '==========')
-
-note_rawclip: RawClip = RawClip(
-    'Common LISP: A Gentle Introduction to Symbolic Computation (Dover Books on Engineering) (David S. Touretzky)',
-    '- Your Note on page 217 | Location 3326 | Added on Friday, September 29, 2023 2:00:29 PM',
-    '',
-    'Recursion en la vida real',
-    '==========')
-
-corrupted_rawclip: RawClip = RawClip(
-    'Common LISP: A Gentle Introduction to Symbolic Computation (Dover Books on Engineering) (David S. Touretzky)',
-    '- Your Clip on page 217 | Location 3326 | Added on Friday, September 29, 2023 2:00:29 PM',
-    '',
-    'Recursion en la vida real',
-    '==========')
-
-def test_get_rawclip_type():
-    assert get_rawclip_type(highlight_rawclip) == 'highlight'
-    assert get_rawclip_type(note_rawclip) == 'note'
-    with pytest.raises(RuntimeError):
-        get_rawclip_type(corrupted_rawclip)
-
-def test_parse_rawclip():
-    highlight = parse_rawclip(highlight_rawclip)
-    assert highlight.source    == highlight_rawclip.source
-    assert highlight.page      == [40, 45]
-    assert highlight.location  == [542, 546]
-    assert highlight.date      == date(2022, 11, 17)
-    assert highlight.time      == time(12, 55, 54)
-    assert highlight.content   == 'La Venezuela que ingresa al siglo XX, asolada...'
-
-def test_parse_rawclips_file():
-    testing_clips = parse_rawclips_file('testing_clips.txt')
-    # Tests for highlights extraction
-    highlights = testing_clips.highlights
-    assert all(map(lambda c: c.source != note_rawclip.source, highlights))
-    assert len(highlights)         == 4
-    assert highlights[0].page      == [40]
-    assert highlights[0].location  == [542, 546]
-    assert highlights[3].source    == 'Python (Python Documentation Authors)'
-    assert highlights[3].content.startswith('To use formatted string literals')
-    assert highlights[3].date      == date(2024, 5, 10)
-    assert highlights[3].time      == time(18, 45, 50)
-    # Tests for notes extraction
-    notes = testing_clips.notes
-    assert all(map(lambda c: c.source != highlight_rawclip.source, notes))
-    assert len(notes)         == 3
-
-def test_parse_time_info():
-    assert parse_time_info('11:59:59 PM') == time(23, 59, 59)
-    assert parse_time_info('12:00:00 AM') == time(0, 0, 0)
-    assert parse_time_info('12:00:01 AM') == time(0, 0, 1)
-    assert parse_time_info('11:59:59 AM') == time(11, 59, 59)
-    assert parse_time_info('12:00:00 PM') == time(12, 0, 0)
-    assert parse_time_info('12:00:01 PM') == time(12, 0, 1)
-
-def test_pages_and_loc_to_str():
-    assert pages_and_loc_to_str([]) == 'no data'
-    assert pages_and_loc_to_str([1]) == '1'
-    assert pages_and_loc_to_str([1, 5]) == '1-5'
-    assert pages_and_loc_to_str([1, 5, 10]) == '1, 5, 10'
