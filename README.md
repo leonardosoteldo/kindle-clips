@@ -4,7 +4,17 @@ Process your kindle clips into formatted text, org-mode entries or JSON objects.
 
 ## Usage
 
-Use your Kindle 'My Clippings.txt' file as input.
+Use your Kindle 'My Clippings.txt' file as input:
+
+`$ python3 kindle_clips.py 'My Clippings.txt'`
+
+This will print some processing messages and the processed clips into stdout in
+text format.
+
+`$ python3 kindle_clips.py -q 'My Clippings.txt' -o output.txt`
+
+This will ignore messages and just write the processed clips into the file
+'output.txt', in text format.
 
 CARE! Using the `-o FILE` or `--output FILE` option will overwrite the given
 FILE, without confirmation. This should change in the short term as is not
@@ -45,5 +55,5 @@ Made this tool to learn the Python language and its standar library. I have made
 some tests at unit and integration level. But some e2e testing is lacking.
 
 To run tests install the 'pytest' library in the usend VENV and use `$ pytest
-test\_kindle\_clips.py`. Using `pytest` alone or adding options such as `$
+test_kindle_clips.py`. Using `pytest` alone or adding options such as `$
 pytest -v test_kindle_clips.py` is currently giving error messages.
