@@ -46,4 +46,4 @@ some tests at unit and integration level. But some e2e testing is lacking.
 
 To run tests install the 'pytest' library in the usend VENV and use `$ pytest
 test\_kindle\_clips.py`. Using `pytest` alone or adding options such as `$
-pytest -v test\_kindle\_clips.py` is currently giving error messages.
+pytest -v test_kindle_clips.py` is currently giving error messages.
