@@ -148,7 +148,9 @@ def parse_page_info(string: str) -> list[int]:
     if match is None:
         return []
     else:
-        return [int(page) for page in match.groups() if page is not None]
+        # Using a set to remove duplicates, then sorting it
+        pp = {int(p) for p in match.groups() if p is not None}
+        return sorted(list(pp))
 
 def parse_location_info(string: str) -> list[int]:
     "Parse the location information as given in Clip.info."
@@ -157,7 +159,9 @@ def parse_location_info(string: str) -> list[int]:
     if match is None:
         return []
     else:
-        return [int(loc) for loc in match.groups() if loc is not None]
+        # Using a set to remove duplicates, then sorting it
+        loc = {int(loc) for loc in match.groups() if loc is not None}
+        return sorted(list(loc))
 
 MONTHS: dict = {
     "january"    : 1,
@@ -232,16 +236,24 @@ def text_formatter(clips: list[Clip]) -> str:
 
     for clip in clips:
 
-        c = ''.join([f"Source: {clip.source}\n",
-                     f"Page: {pages_and_loc_to_str(clip.page)}\n",
-                     f"Location: {pages_and_loc_to_str(clip.location)}\n",
-                     f"Creation: {str(clip.date)} | {str(clip.time)}\n",
-                     f"{clip.type.capitalize()}:\n\n{clip.content}\n",
-                     delimiter])
+        source  = clip.source
+        page    = pages_and_loc_to_str(clip.page)
+        loc     = pages_and_loc_to_str(clip.location)
+        date    = str(clip.date)
+        time    = str(clip.time)
+        type    = clip.type.capitalize()
+        content = clip.content
+
+        c = (f"Source: {source}\n"
+             f"Page: {page}\n"
+             f"Location: {loc}\n"
+             f"Creation: {date} | {time}\n"
+             f"{type}:\n\n"
+             f"{content}\n")
 
         result.append(c)
 
-    return delimiter + ''.join(result)
+    return delimiter + delimiter.join(result) + delimiter
 
 def org_formatter(clips: list[Clip]) -> str:
     """Process a list of clips into a pretty org-mode format."""
@@ -251,23 +263,15 @@ def json_formatter(clips: list[Clip]) -> str:
     """Process a list of clips into json format."""
     return 'json formatter not implemented'
 
-def pages_and_loc_to_str(pp: list[int] | None) -> str:
+def pages_and_loc_to_str(pp_or_loc: list[int] | None) -> str:
     "Convert pages and locations into a pretty string."
 
-    if pp is None:
+    if pp_or_loc is None or len(pp_or_loc) == 0:
         return 'no data'
-
+    elif len(pp_or_loc) <= 2:
+        return '-'.join((str(p) for p in pp_or_loc))
     else:
-        pp_len: int = len(pp)
-
-        if pp_len == 0:
-            return 'no data'
-        elif pp_len == 1:
-            return str(pp[0])
-        elif pp_len == 2:
-            return str(pp[0]) + '-' + str(pp[1])
-        else:
-            return ''.join(str(i) + ', ' for i in pp).removesuffix(', ')
+        return ', '.join((str(p) for p in pp_or_loc))
 
 def print_parsing_errors(rclips: list[tuple[RawClip, int]]) -> None:
     """Print messages about all RawClips that couldn't be parsed.
@@ -280,12 +284,12 @@ def print_parsing_errors(rclips: list[tuple[RawClip, int]]) -> None:
 
 def print_rawclip_parsing_error(rclip: RawClip, line_num: int) -> None:
     "Print message about RawClip that couldn't be parsed correctly."
-    print("Got an error while processing your Kindle clips file.")
-    print(f"The clip ending at line {line_num} couldn't be parsed:")
-    print(f'    > {rclip.source}')
-    print(f'ERR > {rclip.info}')
-    print(f"    > {rclip.blank}")
-    print(f'    > {rclip.content}')
+    print("Got an error while processing your Kindle clips file.",
+          f"The clip ending at line {line_num} couldn't be parsed:",
+          f'    > {rclip.source}',
+          f'ERR > {rclip.info}',
+          f'    > {rclip.blank}',
+          f'    > {rclip.content}')
 
     return
 
@@ -297,20 +301,23 @@ def print_extraction_messages(is_quiet: bool, extraction: Extraction,
         return
 
     elif not types:
-        print(f"Found {len(extraction.highlights)} highlights.")
-        print(f"Found {len(extraction.notes)} notes.")
-        print(f"Found {len(extraction.bookmarks)} bookmarks.")
+
+        print(('Found {} highlights.\n'
+               'Found {} notes.\n'
+               'Found {} bookmarks.\n').format(len(extraction.highlights),
+                                               len(extraction.notes),
+                                               len(extraction.bookmarks)))
         return
 
     else:
         if 'highlights' in types:
-            print(f"Found {len(extraction.highlights)} highlights.")
+            print("Found {} highlights.".format(len(extraction.highlights)))
 
         if 'notes' in types:
-            print(f"Found {len(extraction.notes)} notes.")
+            print("Found {} notes.".format(len(extraction.notes)))
 
         if 'bookmarks' in types:
-            print(f"Found {len(extraction.bookmarks)} bookmarks.")
+            print("Found {} bookmarks.".format(len(extraction.bookmarks)))
 
         return
 
@@ -365,7 +372,7 @@ args = parser.parse_args()
 if __name__ == '__main__':
 
     # Initial message
-    if not args.quiet: print(f"Processing '{args.file}'.")
+    if not args.quiet: print("Processing '{}'.".format(args.file))
 
     # Get extracted clips
     extraction: Extraction = parse_rawclips_file(args.file)
@@ -391,8 +398,8 @@ if __name__ == '__main__':
             results.extend(extraction.bookmarks)
 
     # Print to stdout or write to requested file
-    if args.output_file is None:
+    if args.output is None:
         print(format_clips(results, args.format))
     else:
-        with open(args.output_file, mode='w', encoding='utf-8') as file:
+        with open(args.output, mode='w', encoding='utf-8') as file:
             file.write(format_clips(results, args.format))
